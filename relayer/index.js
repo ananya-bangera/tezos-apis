@@ -35,7 +35,7 @@ app.get('/fusion-plus/orders/v1.0/order/active', async (req, res) => {
 });
 
 
-app.post('/tezos/orders/create', async (req, res) => {
+app.post('/relayer/v1.0/submit', async (req, res) => {
   // Create a new order
   const newOrder = new Order(req.body);
   console.log('Received new order:', newOrder);
@@ -49,10 +49,28 @@ app.post('/tezos/orders/create', async (req, res) => {
   res.status(200).json(newOrder);
 });
 
+//Create a list of orders
+app.post('/relayer/v1.0/submit/many', async (req, res) => {
+  // Create multiple orders from the request <body>
+  const ordersData = req.body.orders; // Expecting an array of order objects
+  if (!Array.isArray(ordersData) || ordersData.length === 0) {  
+    return res.status(400).json({ error: 'Invalid orders data' });
+  }
+  try {
+    const orders = await Order.insertMany(ordersData);
+    console.log('Orders created:', orders);
+    res.status(201).json(orders);
+  } catch (err) {
+    console.error('Error creating orders:', err); 
+    res.status(500).json({ error: 'Failed to create orders' });
+  }
+});
+
+
 // 6884f0220fac7bda096dae2b
 
 // Create a fill for an order
-app.post('/tezos/orders/:orderId/fills/create', async (req, res) => {
+app.post('/relayer/v1.0/submit/secret', async (req, res) => {
   const orderId = req.params.orderId;
   const fillData = req.body; // Assuming fill data is sent in the request body
   fillData.orderId = orderId; // Associate fill with the order
