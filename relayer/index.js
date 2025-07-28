@@ -1,22 +1,27 @@
+require('dotenv').config();
 const express = require('express');
-const Order = require('./model/order'); // Adjust the path as necessary
-const Fills = require('./model/fills'); // Adjust the path as necessary
-// const { MongoClient } = require('mongodb');
-const app = express();
-const port = 3000;
-// const uri = 'mongodb://localhost:27017'; // Update with your MongoDB connection string
+const cors = require('cors');
+const crypto = require('crypto');
 
+const Order = require('./model/order');
+const Fills = require('./model/fills');
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+// Connect to MongoDB using MONGODB_URI
 const mongoose = require('mongoose');
-mongoose.connect('mongodb+srv://ananyabarticles:WGVkRBCGmSEhSvnc@relayerinfo.klkh4rx.mongodb.net/', {
+mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
-  useUnifiedTopology: true
+  useUnifiedTopology: true,
 })
   .then(() => console.log('MongoDB connected!'))
   .catch(err => console.error('MongoDB connection error:', err));
-// const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+
+app.use(cors());
 app.use(express.json());
 
-app.get('/', async (req, res) => {
+app.get('/', (req, res) => {
   res.json({ status: 'success', message: 'Hello!' });
 });
 
