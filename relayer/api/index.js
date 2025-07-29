@@ -332,6 +332,4 @@ app.post('/v1.0/quote/build', async (req, res) => {
 });
 
 // Start the server
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
-});
+module.exports = serverless(app);
