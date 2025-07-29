@@ -1,15 +1,14 @@
-require('dotenv').config();
+const mongoose = require('mongoose');
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const serverless = require('serverless-http');
-require('dotenv').config()
+require('dotenv').config();
+
 const Order = require('../model/order');
 const Fills = require('../model/fills');
-const mongoose = require('mongoose');
 
 const app = express();
-const port = process.env.PORT || 3000;
 
 // DB Connection (Singleton pattern for Vercel)
 let isConnected = false;
@@ -23,24 +22,32 @@ async function connectDB() {
     console.log('MongoDB connected');
   }
 }
+
 app.use(cors());
 app.use(express.json());
 
+
+// Root health‑check route
 app.get('/', (req, res) => {
-  res.json({ status: 'success', message: 'Hello!' });
+  console.log('🏓 received GET /');   
+  res.json({ ok: true, message: 'pong' });
 });
+
 
 
 //Orders API
 
 //Get Cross Chain Swap Active Orders
 app.get('/fusion-plus/orders/v1.0/order/active', async (req, res) => {
+  console.log('🏓 received GET /fusion-plus/orders/v1.0/order/active');
   // Fetch from DB all orders with status 'active'
   await connectDB(); // Ensure DB connection
+   console.log('🔗 Mongo connected');
   try {
     const orders = await Order.find({ status: 'ACTIVE' }).populate('fillIds');
     res.json(orders);
   } catch (err) {
+     console.error('❌ Error in handler:', err);
     res.status(500).json({ error: err.message });
   }
 });
