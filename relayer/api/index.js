@@ -6,6 +6,7 @@ const serverless = require('serverless-http');
 require('dotenv').config()
 const Order = require('../model/order');
 const Fills = require('../model/fills');
+const mongoose = require('mongoose');
 
 const app = express();
 const port = process.env.PORT || 3000;
