@@ -2,22 +2,26 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
-
-const Order = require('./model/order');
-const Fills = require('./model/fills');
+const serverless = require('serverless-http');
+require('dotenv').config()
+const Order = require('../model/order');
+const Fills = require('../model/fills');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Connect to MongoDB using MONGODB_URI
-const mongoose = require('mongoose');
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-  .then(() => console.log('MongoDB connected!'))
-  .catch(err => console.error('MongoDB connection error:', err));
-
+// DB Connection (Singleton pattern for Vercel)
+let isConnected = false;
+async function connectDB() {
+  if (!isConnected) {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
+    isConnected = true;
+    console.log('MongoDB connected');
+  }
+}
 app.use(cors());
 app.use(express.json());
 
@@ -31,6 +35,7 @@ app.get('/', (req, res) => {
 //Get Cross Chain Swap Active Orders
 app.get('/fusion-plus/orders/v1.0/order/active', async (req, res) => {
   // Fetch from DB all orders with status 'active'
+  await connectDB(); // Ensure DB connection
   try {
     const orders = await Order.find({ status: 'ACTIVE' }).populate('fillIds');
     res.json(orders);
@@ -42,6 +47,7 @@ app.get('/fusion-plus/orders/v1.0/order/active', async (req, res) => {
 
 app.post('/relayer/v1.0/submit', async (req, res) => {
   // Create a new order
+  await connectDB(); // Ensure DB connection
   const newOrder = new Order(req.body);
   console.log('Received new order:', newOrder);
   newOrder.save().then(doc => {
@@ -57,8 +63,9 @@ app.post('/relayer/v1.0/submit', async (req, res) => {
 //Create a list of orders
 app.post('/relayer/v1.0/submit/many', async (req, res) => {
   // Create multiple orders from the request <body>
+  await connectDB(); // Ensure DB connection
   const ordersData = req.body.orders; // Expecting an array of order objects
-  if (!Array.isArray(ordersData) || ordersData.length === 0) {  
+  if (!Array.isArray(ordersData) || ordersData.length === 0) {
     return res.status(400).json({ error: 'Invalid orders data' });
   }
   try {
@@ -66,7 +73,7 @@ app.post('/relayer/v1.0/submit/many', async (req, res) => {
     console.log('Orders created:', orders);
     res.status(201).json(orders);
   } catch (err) {
-    console.error('Error creating orders:', err); 
+    console.error('Error creating orders:', err);
     res.status(500).json({ error: 'Failed to create orders' });
   }
 });
@@ -76,6 +83,7 @@ app.post('/relayer/v1.0/submit/many', async (req, res) => {
 
 // Create a fill for an order
 app.post('/relayer/v1.0/submit/secret', async (req, res) => {
+  await connectDB(); // Ensure DB connection
   const orderId = req.params.orderId;
   const fillData = req.body; // Assuming fill data is sent in the request body
   fillData.orderId = orderId; // Associate fill with the order
@@ -93,6 +101,7 @@ app.post('/relayer/v1.0/submit/secret', async (req, res) => {
 
 // Get Actual Escrow Factory Contract Address
 app.get('/fusion-plus/orders/v1.0/order/escrow', (req, res) => {
+
   res.json({ contractAddress: process.env.TEZOS_ESCROW_FACTORY_ADDRESS });
 });
 
@@ -100,6 +109,7 @@ app.get('/fusion-plus/orders/v1.0/order/escrow', (req, res) => {
 app.get('/fusion-plus/orders/v1.0/order/maker/:makerAddress', async (req, res) => {
   console.log('Fetching orders for maker address:', req.params.makerAddress);
   try {
+    await connectDB(); // Ensure DB connection
     const orders = await Order.find({
       makerDestinationChainAddress: req.params.makerAddress
     }).populate('fillIds');
@@ -113,6 +123,7 @@ app.get('/fusion-plus/orders/v1.0/order/maker/:makerAddress', async (req, res) =
 // Get All Data to Perform Withdrawal and Cancellation
 app.get('/tezos/orders/:orderId/withdrawal-cancellation-data', async (req, res) => {
   // Collate all necessary information for withdrawal/cancellation.
+  await connectDB(); // Ensure DB connection
   try {
     const order = await Order.findById(req.params.orderId).populate('fillIds');
     if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -126,6 +137,7 @@ app.get('/tezos/orders/:orderId/withdrawal-cancellation-data', async (req, res) 
 // Get Secret (Fill) Submission Indexes for an Order
 app.get('/tezos/orders/:orderId/secrets-ready', async (req, res) => {
   // check which secrets are revealed and which are pending for order
+  await connectDB(); // Ensure DB connection
   try {
     const fills = await Fills.find({ orderId: req.params.orderId });
     res.json(fills.map(f => ({
@@ -139,6 +151,7 @@ app.get('/tezos/orders/:orderId/secrets-ready', async (req, res) => {
 // Get All Orders with Fills Ready for Submission (status: PLACED/OPEN)
 app.get('/tezos/orders/secrets-ready', async (req, res) => {
   // Get all orders with secrets ready for submission
+  await connectDB(); // Ensure DB connection
   try {
     const fills = await Fills.find({ status: { $in: ['OPEN', 'PLACED'] } });
     // Optionally, include their orders:
@@ -152,6 +165,7 @@ app.get('/tezos/orders/secrets-ready', async (req, res) => {
 
 // Get idx of each secret that is ready for submission for all orders
 app.get('/v1.0/order/ready-to-accept-secret-fills/:orderHash', async (req, res) => {
+  await connectDB(); // Ensure DB connection
   try {
     const order = await Order.findOne({ orderHash: req.params.orderHash }).populate({
       path: 'fillIds',
@@ -168,6 +182,7 @@ app.get('/v1.0/order/ready-to-accept-secret-fills/:orderHash', async (req, res) 
 
 // GET /v1.0/order/status/:orderHash
 app.get('/v1.0/order/status/:orderHash', async (req, res) => {
+  await connectDB(); // Ensure DB connection
   try {
     const order = await Order.findOne({ orderHash: req.params.orderHash });
     if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -180,6 +195,7 @@ app.get('/v1.0/order/status/:orderHash', async (req, res) => {
 
 // POST /v1.0/order/status
 app.post('/v1.0/order/status', async (req, res) => {
+  await connectDB(); // Ensure DB connection
   try {
     const hashes = req.body.orderHashes; // Expect array of hashes
     const statuses = await Order.find({ orderHash: { $in: hashes } }, { orderHash: 1, status: 1 });
@@ -193,6 +209,7 @@ app.post('/v1.0/order/status', async (req, res) => {
 
 //Get quote details based on input data
 app.get('/v1.0/quote/receive', async (req, res) => {
+  await connectDB(); // Ensure DB connection
   try {
     const {
       srcChain, dstChain,
@@ -252,6 +269,7 @@ function generateQuoteId(params) {
 }
 
 app.post('/v1.0/quote/receive', async (req, res) => {
+  await connectDB(); // Ensure DB connection
   const body = req.body;
   if (!(body.srcChain && body.dstChain && body.srcTokenAddress && body.dstTokenAddress && body.amount && body.walletAddress)) {
     return res.status(400).json({ error: 'Missing required field(s)' });
@@ -284,6 +302,7 @@ app.post('/v1.0/quote/receive', async (req, res) => {
 
 
 app.post('/v1.0/quote/build', async (req, res) => {
+  await connectDB(); // Ensure DB connection
   const body = req.body;
   if (!(body.srcChain && body.dstChain && body.srcTokenAddress && body.dstTokenAddress && body.amount && body.walletAddress)) {
     return res.status(400).json({ error: 'Missing required field(s)' });
