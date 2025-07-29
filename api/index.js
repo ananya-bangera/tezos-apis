@@ -29,11 +29,14 @@ app.use(express.json());
 
 // Root health‑check route
 app.get('/', (req, res) => {
-  console.log('🏓 received GET /');   
+  console.log('🏓 received GET /');
   res.json({ ok: true, message: 'pong' });
 });
 
-
+app.get('/healthz', (req, res) => {
+  console.log('🏓 healthz ping');
+  res.send('OK');
+});
 
 //Orders API
 
@@ -41,13 +44,20 @@ app.get('/', (req, res) => {
 app.get('/fusion-plus/orders/v1.0/order/active', async (req, res) => {
   console.log('🏓 received GET /fusion-plus/orders/v1.0/order/active');
   // Fetch from DB all orders with status 'active'
-  await connectDB(); // Ensure DB connection
-   console.log('🔗 Mongo connected');
+  console.log('⏳ Trying DB connect…');
+  try {
+    await connectDB();
+    console.log('✅ DB connect successful');
+  } catch (err) {
+    console.error('❌ DB connect failed', err);
+    return res.status(500).send('DB error');
+  }
+  console.log('🔗 Mongo connected');
   try {
     const orders = await Order.find({ status: 'ACTIVE' }).populate('fillIds');
     res.json(orders);
   } catch (err) {
-     console.error('❌ Error in handler:', err);
+    console.error('❌ Error in handler:', err);
     res.status(500).json({ error: err.message });
   }
 });
