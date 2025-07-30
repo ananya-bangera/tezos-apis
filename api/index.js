@@ -349,4 +349,7 @@ app.post('/v1.0/quote/build', async (req, res) => {
 });
 
 // Start the server
-module.exports = serverless(app);
+module.exports = async (req, res) => {
+  await connectDB();
+  return app(req, res);
+};
