@@ -59,8 +59,8 @@ app.get('/fusion-plus/orders/v1.0/order/active', async (req, res) => {
   }
   try {
     const orders = await Order.find({
-      srcChain: Number(srcChain),
-      destinationChain: Number(dstChain),
+      srcChain: srcChain,
+      destinationChain: dstChain,
       status: 'ACTIVE'
     }).populate('fillIds');
     res.json(orders);
