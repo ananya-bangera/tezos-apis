@@ -346,7 +346,7 @@ app.post('/fusion-plus/relayer/v1.0/submit', async (req, res) => {
   await connectDB(); // Ensure DB connection
   const newOrder = new Order(req.body);
   console.log('Received new order:', newOrder);
-  newOrder.save().then(doc => {
+  await newOrder.save().then(doc => {
     console.log('Dummy active order saved:', doc);
   })
     .catch(err => {
