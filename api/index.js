@@ -5,14 +5,19 @@ const crypto = require('crypto');
 const serverless = require('serverless-http');
 require('dotenv').config();
 
+const { TezosToolkit } = require('@taquito/taquito');
+const { InMemorySigner } = require('@taquito/signer');
+
 const Order = require('../model/order');
 const Fills = require('../model/fills');
 
 const app = express();
 
+const tezos = new TezosToolkit('https://rpc.ghostnet.teztnets.com');
+
 // DB Connection 
 let isConnected = false;
-async function connectDB() {
+async function connectDBAndTezos() {
   console.log('⏳ Trying DB connect…');
   if (!isConnected) {
 
@@ -29,6 +34,10 @@ async function connectDB() {
     isConnected = true;
     console.log('🔗 Mongo connected');
   }
+  console.log('⏳ Trying to set provider…');
+  tezos.setProvider({ signer: new InMemorySigner(process.env.IN_MEMORY_PRIVATE_KEY) });
+
+
 }
 
 app.use(cors());
@@ -52,7 +61,7 @@ app.get('/health-check', (req, res) => {
 //Get Cross Chain Swap Active Orders
 
 app.get('/fusion-plus/orders/v1.0/order/active', async (req, res) => {
-  await connectDB();
+  await connectDBAndTezos();
   const { srcChain, dstChain } = req.query;
   if (!srcChain || !dstChain) {
     return res.status(400).json({ error: 'srcChain and dstChain are required' });
@@ -79,7 +88,7 @@ app.get('/fusion-plus/orders/v1.0/order/escrow', (req, res) => {
 app.get('/fusion-plus/orders/v1.0/order/maker/:makerAddress', async (req, res) => {
   console.log('Fetching orders for maker address:', req.params.makerAddress);
   try {
-    await connectDB(); // Ensure DB connection
+    await connectDBAndTezos(); // Ensure DB connection
     // Build dynamic filter based on query params
     const filter = {
       makerSourceChainAddress: req.params.makerAddress
@@ -124,7 +133,7 @@ app.get('/fusion-plus/orders/v1.0/order/maker/:makerAddress', async (req, res) =
 // Get All Data to Perform Withdrawal and Cancellation
 app.get('/fusion-plus/orders/v1.0/order/secrets/:orderHash', async (req, res) => {
   // Collate all necessary information for withdrawal/cancellation.
-  await connectDB(); // Ensure DB connection
+  await connectDBAndTezos(); // Ensure DB connection
   try {
     const order = await Order.findOne({ orderHash: req.params.orderHash }).populate('fillIds');
     if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -137,7 +146,7 @@ app.get('/fusion-plus/orders/v1.0/order/secrets/:orderHash', async (req, res) =>
 
 // Get idx of each secret that is ready for submission for all orders
 app.get('/fusion-plus/orders/v1.0/order/ready-to-accept-secret-fills/:orderHash', async (req, res) => {
-  await connectDB(); // Ensure DB connection
+  await connectDBAndTezos(); // Ensure DB connection
   try {
     const order = await Order.findOne({ orderHash: req.params.orderHash, status: { $in: ['ACTIVE', 'PARTIAL_DEPOSITED', 'COMPLETE_DEPOSITED'] } }).populate({
       path: 'fillIds',
@@ -153,7 +162,7 @@ app.get('/fusion-plus/orders/v1.0/order/ready-to-accept-secret-fills/:orderHash'
 
 // GET /v1.0/order/status/:orderHash
 app.get('/fusion-plus/orders/v1.0/order/status/:orderHash', async (req, res) => {
-  await connectDB(); // Ensure DB connection
+  await connectDBAndTezos(); // Ensure DB connection
   try {
     const order = await Order.findOne({ orderHash: req.params.orderHash });
     if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -166,7 +175,7 @@ app.get('/fusion-plus/orders/v1.0/order/status/:orderHash', async (req, res) => 
 
 // POST /v1.0/order/status
 app.post('/fusion-plus/orders/v1.0/order/status', async (req, res) => {
-  await connectDB(); // Ensure DB connection
+  await connectDBAndTezos(); // Ensure DB connection
   try {
     const hashes = req.body.orderHashes; // Expect array of hashes
     const statuses = await Order.find({ orderHash: { $in: hashes } });
@@ -182,7 +191,7 @@ app.post('/fusion-plus/orders/v1.0/order/status', async (req, res) => {
 // Get Secret (Fill) Submission Indexes for an Order
 app.get('/tezos/orders/:orderId/secrets-ready', async (req, res) => {
   // check which secrets are revealed and which are pending for order
-  await connectDB(); // Ensure DB connection
+  await connectDBAndTezos(); // Ensure DB connection
   try {
     const fills = await Fills.find({ orderId: req.params.orderId });
     res.json(fills.map(f => ({
@@ -196,7 +205,7 @@ app.get('/tezos/orders/:orderId/secrets-ready', async (req, res) => {
 // Get All Orders with Fills Ready for Submission (status: PLACED/OPEN)
 app.get('/tezos/orders/secrets-ready', async (req, res) => {
   // Get all orders with secrets ready for submission
-  await connectDB(); // Ensure DB connection
+  await connectDBAndTezos(); // Ensure DB connection
   try {
     const fills = await Fills.find({ status: { $in: ['OPEN', 'PLACED'] } });
     // Optionally, include their orders:
@@ -217,7 +226,7 @@ app.get('/tezos/orders/secrets-ready', async (req, res) => {
 
 //Get quote details based on input data
 app.get('/fusion-plus/quoter/v1.0/quote/receive', async (req, res) => {
-  await connectDB(); // Ensure DB connection
+  await connectDBAndTezos(); // Ensure DB connection
   try {
     const {
       srcChain, dstChain,
@@ -277,7 +286,7 @@ function generateQuoteId(params) {
 }
 
 app.post('/fusion-plus/quoter/v1.0/quote/receive', async (req, res) => {
-  await connectDB(); // Ensure DB connection
+  await connectDBAndTezos(); // Ensure DB connection
   const body = req.body;
   if (!(body.srcChain && body.dstChain && body.srcTokenAddress && body.dstTokenAddress && body.amount && body.walletAddress)) {
     return res.status(400).json({ error: 'Missing required field(s)' });
@@ -310,7 +319,7 @@ app.post('/fusion-plus/quoter/v1.0/quote/receive', async (req, res) => {
 
 
 app.post('/fusion-plus/quoter/v1.0/quote/build', async (req, res) => {
-  await connectDB(); // Ensure DB connection
+  await connectDBAndTezos(); // Ensure DB connection
   const body = req.body;
   if (!(body.srcChain && body.dstChain && body.srcTokenAddress && body.dstTokenAddress && body.amount && body.walletAddress)) {
     return res.status(400).json({ error: 'Missing required field(s)' });
@@ -343,15 +352,54 @@ app.post('/fusion-plus/quoter/v1.0/quote/build', async (req, res) => {
 
 app.post('/fusion-plus/relayer/v1.0/submit', async (req, res) => {
   // Create a new order
-  await connectDB(); // Ensure DB connection
+  await connectDBAndTezos(); // Ensure DB connection
   const newOrder = new Order(req.body);
+  let orderObject = {};
   console.log('Received new order:', newOrder);
   await newOrder.save().then(doc => {
     console.log('Dummy active order saved:', doc);
+    orderObject = doc.toObject();
   })
     .catch(err => {
       console.error('Failed to save dummy order:', err);
     });
+
+  console.log('Calling Dutch Auction contract to create auction…');
+
+  const contract = await tezos.contract.at(
+    process.env.DUTCH_AUCTION_CONTRACT_ADDRESS
+  );
+
+  // Build times as JS Date objects
+  const now = new Date();
+  const start_time = new Date(now.getTime() + 1000 * 60); // Add 1 minute to current time
+  const end_time = new Date(start_time.getTime() + 1000 * 60 * (req.body.time));
+
+  // Convert to hex
+  const auctionIdHex = Buffer
+    .from(orderObject._id.toString())
+    .toString('hex');
+
+  const required_taker_toke_per_maker = (req.body.dstQty) / req.body.srcQty;
+  // Use ISO strings for timestamps
+  const args = [
+    `0x${auctionIdHex}`,     // bytes
+    1000,                    // base_gas_price
+    required_taker_toke_per_maker * 0.98 * 1e6,       // end_price
+    end_time.toISOString(),   // end_time (Date)
+    500,                    // gas_adjustment_factor
+    req.body.srcQty * 1e6,                  // maker_amount
+    required_taker_toke_per_maker * 1.05 * 1e6,   // start_price
+    start_time.toISOString()      // start_time (Date)
+  ];
+
+  // And now send!
+  const op = await contract.methods
+    .create_auction(...args)
+    .send();
+  await op.confirmation();
+  console.log('✔️ Operation hash:', op.opHash);
+
 
   res.status(200).json(newOrder);
 });
@@ -359,7 +407,7 @@ app.post('/fusion-plus/relayer/v1.0/submit', async (req, res) => {
 //Create a list of orders
 app.post('/fusion-plus/relayer/v1.0/submit/many', async (req, res) => {
   // Create multiple orders from the request <body>
-  await connectDB(); // Ensure DB connection
+  await connectDBAndTezos(); // Ensure DB connection
   const ordersData = req.body.orders; // Expecting an array of order objects
   if (!Array.isArray(ordersData) || ordersData.length === 0) {
     return res.status(400).json({ error: 'Invalid orders data' });
@@ -376,7 +424,7 @@ app.post('/fusion-plus/relayer/v1.0/submit/many', async (req, res) => {
 
 // Create a fill for an order
 app.post('/fusion-plus/relayer/v1.0/submit/secret', async (req, res) => {
-  await connectDB(); // Ensure DB connection
+  await connectDBAndTezos(); // Ensure DB connection
   const orderId = req.params.orderId;
   const fillData = req.body; // Assuming fill data is sent in the request body
   fillData.orderId = orderId; // Associate fill with the order
@@ -394,6 +442,6 @@ app.post('/fusion-plus/relayer/v1.0/submit/secret', async (req, res) => {
 
 // Start the server
 module.exports = async (req, res) => {
-  await connectDB();
+  await connectDBAndTezos();
   return app(req, res);
 };

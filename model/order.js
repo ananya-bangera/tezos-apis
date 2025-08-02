@@ -17,6 +17,8 @@ const OrderSchema = new mongoose.Schema({
   srcQty: String,
   dstQty: String,
   orderHash: String,
+  secret: String,
+  time: Number,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
