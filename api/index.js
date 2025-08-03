@@ -398,7 +398,7 @@ app.post('/fusion-plus/relayer/v1.0/submit', async (req, res) => {
     .create_auction(...args)
     .send();
   await op.confirmation();
-  console.log('✔️ Operation hash:', op.opHash);
+  console.log('✔️ Operation hash:', op.hash);
 
 
   res.status(200).json(newOrder);
@@ -436,6 +436,29 @@ app.post('/fusion-plus/relayer/v1.0/submit/secret', async (req, res) => {
   } catch (err) {
     console.error('Error creating fill:', err);
     res.status(500).json({ error: 'Failed to create fill' });
+  }
+});
+
+
+// Place a fill for an order
+app.post('/fusion-plus/relayer/v1.0/submit/secret/place', async (req, res) => {
+  await connectDBAndTezos(); // Ensure DB connection
+  const fillID = req.body.fillId;
+  if (!fillID) {
+    return res.status(400).json({ error: 'Missing fillId' });
+  }
+  try {
+    const updatedFill = await Fills.findByIdAndUpdate(
+      fillID,
+      { status: 'PLACED' },
+      { new: true }
+    );
+    if (!updatedFill) {
+      return res.status(404).json({ error: 'Fill not found' });
+    }
+    res.json(updatedFill);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update fill status' });
   }
 });
 
