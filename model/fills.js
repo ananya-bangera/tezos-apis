@@ -10,6 +10,8 @@ const FillsSchema = new mongoose.Schema({
   takerSourceChainAddress: String,
   takerDestChainAddress: String,
   safetyDeposit: String,
+  makingQty: Number,
+  takingQty: Number,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

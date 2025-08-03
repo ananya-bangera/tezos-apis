@@ -161,13 +161,13 @@ app.get('/fusion-plus/orders/v1.0/order/ready-to-accept-secret-fills/:orderHash'
 });
 
 // GET /v1.0/order/status/:orderHash
-app.get('/fusion-plus/orders/v1.0/order/status/:orderHash', async (req, res) => {
+app.get('/fusion-plus/orders/v1.0/order/status/:orderId', async (req, res) => {
   await connectDBAndTezos(); // Ensure DB connection
   try {
-    const order = await Order.findOne({ orderHash: req.params.orderHash });
+    const order = await Order.findById(req.params.orderId).populate('fillIds');
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    res.json({ status: order.status });
+    res.json(order);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -380,16 +380,16 @@ app.post('/fusion-plus/relayer/v1.0/submit', async (req, res) => {
     .from(orderObject._id.toString())
     .toString('hex');
 
-  const required_taker_toke_per_maker = (req.body.dstQty) / req.body.srcQty;
+  const required_taker_toke_per_maker = (req.body.dstQty) / req.body.srcQty;  //8
   // Use ISO strings for timestamps
   const args = [
     `0x${auctionIdHex}`,     // bytes
     1000,                    // base_gas_price
-    required_taker_toke_per_maker * 0.98 * 1e6,       // end_price
+    Math.floor(required_taker_toke_per_maker * 0.98 * 1e6),       // end_price (integer)
     end_time.toISOString(),   // end_time (Date)
     500,                    // gas_adjustment_factor
     req.body.srcQty * 1e6,                  // maker_amount
-    required_taker_toke_per_maker * 1.05 * 1e6,   // start_price
+    Math.floor(required_taker_toke_per_maker * 1.05 * 1e6),   // start_price (integer)
     start_time.toISOString()      // start_time (Date)
   ];
 
@@ -425,9 +425,8 @@ app.post('/fusion-plus/relayer/v1.0/submit/many', async (req, res) => {
 // Create a fill for an order
 app.post('/fusion-plus/relayer/v1.0/submit/secret', async (req, res) => {
   await connectDBAndTezos(); // Ensure DB connection
-  const orderId = req.params.orderId;
   const fillData = req.body; // Assuming fill data is sent in the request body
-  fillData.orderId = orderId; // Associate fill with the order
+  const orderId = fillData.orderId; // Associate fill with the order
   const newFill = new Fills(fillData);
   try {
     const savedFill = await newFill.save();
